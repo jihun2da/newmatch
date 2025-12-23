@@ -1140,6 +1140,37 @@ class BrandMatchingSystem:
         # (실제 구현은 기존 로직과 동일)
         pass
     
+    def remove_size_patterns_from_brand(self, brand_name: str) -> str:
+        """
+        브랜드명에서 사이즈 패턴(괄호/별표 안에 ~ 또는 - 포함)만 삭제
+        
+        삭제 조건:
+        - 괄호 안에 ~ 또는 - 포함: (13~15), (S~XL), (13-15) → 삭제
+        - 별표 안에 ~ 또는 - 포함: *13~15*, *S~XL*, *13-15* → 삭제
+        - 그 외: (기린), *기린*, (1315) → 유지
+        
+        예시:
+        - "클라레오(S~XL)" → "클라레오"
+        - "클라레오(기린)" → "클라레오(기린)"
+        - "브랜드*13~15*" → "브랜드"
+        - "브랜드*기린*" → "브랜드*기린*"
+        """
+        if not brand_name:
+            return brand_name
+        
+        result = brand_name
+        
+        # 괄호 안에 ~ 또는 - 포함된 패턴 삭제: (13~15), (S~XL), (13-15)
+        result = re.sub(r'\([^)]*[~-][^)]*\)', '', result)
+        
+        # 별표 안에 ~ 또는 - 포함된 패턴 삭제: *13~15*, *S~XL*, *13-15*
+        result = re.sub(r'\*[^*]*[~-][^*]*\*', '', result)
+        
+        # 공백 정리
+        result = re.sub(r'\s+', ' ', result).strip()
+        
+        return result
+
     def convert_sheet1_to_sheet2(self, sheet1_df: pd.DataFrame) -> pd.DataFrame:
         """Sheet1 형식을 Sheet2 형식으로 변환 - 성능 최적화 버전"""
         import time
@@ -1218,7 +1249,10 @@ class BrandMatchingSystem:
                         # 괄호가 포함된 브랜드명과 상품명 분리
                         brand_part = bracket_match.group(1).strip()
                         product_part = bracket_match.group(2).strip()
-                        sheet2_row['H열(브랜드)'] = brand_part
+                        
+                        # 브랜드명에서 사이즈 패턴(괄호/별표 안에 ~ 또는 - 포함)만 삭제
+                        cleaned_brand = self.remove_size_patterns_from_brand(brand_part)
+                        sheet2_row['H열(브랜드)'] = cleaned_brand
                         
                         # 상품명에 키워드 제거 적용
                         cleaned_product_name = self.normalize_product_name(product_part)
@@ -1237,7 +1271,10 @@ class BrandMatchingSystem:
                         # 일반적인 띄어쓰기 분할 (공백 제거 후)
                         parts = e_value.split(' ', 1)
                         if parts[0].strip():  # 첫 번째 부분이 비어있지 않으면
-                            sheet2_row['H열(브랜드)'] = parts[0].strip()
+                            # 브랜드명에서 사이즈 패턴(괄호/별표 안에 ~ 또는 - 포함)만 삭제
+                            raw_brand = parts[0].strip()
+                            cleaned_brand = self.remove_size_patterns_from_brand(raw_brand)
+                            sheet2_row['H열(브랜드)'] = cleaned_brand
                             # 상품명에 키워드 제거 적용
                             raw_product_name = parts[1].strip() if len(parts) > 1 else ""
                             if raw_product_name:
@@ -1263,7 +1300,9 @@ class BrandMatchingSystem:
                             sheet2_row['I열(상품명)'] = cleaned_product_name
                     else:
                         # 띄어쓰기가 없으면 전체를 브랜드로 처리
-                        sheet2_row['H열(브랜드)'] = e_value
+                        # 브랜드명에서 사이즈 패턴(괄호/별표 안에 ~ 또는 - 포함)만 삭제
+                        cleaned_brand = self.remove_size_patterns_from_brand(e_value)
+                        sheet2_row['H열(브랜드)'] = cleaned_brand
                         sheet2_row['I열(상품명)'] = ""
                 else:
                     sheet2_row['H열(브랜드)'] = ""
