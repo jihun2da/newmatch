@@ -1199,6 +1199,7 @@ class BrandMatchingSystem:
         - 괄호와 함께 제거: (키워드) → 삭제
         - 대소문자 구분 없이 제거
         - 여러 번 적용하여 모든 키워드 제거
+        - 키워드 자체에 괄호가 포함된 경우 처리: (모델컷) → 모델컷 추출 후 제거
         """
         if not product_name or not self.keyword_list:
             return product_name
@@ -1210,29 +1211,38 @@ class BrandMatchingSystem:
             if not keyword:
                 continue
             
+            # 키워드 정리
+            cleaned_keyword = keyword.strip()
+            
             # * 기호로 감싼 키워드는 특수 처리
-            if keyword.startswith('*') and keyword.endswith('*'):
+            if cleaned_keyword.startswith('*') and cleaned_keyword.endswith('*'):
                 # *13~15* 형태의 키워드
-                inner_keyword = keyword[1:-1]  # * 제거
+                inner_keyword = cleaned_keyword[1:-1]  # * 제거
                 # 괄호와 함께 제거: (13~15), (13-15) 등
                 pattern = r'\(' + re.escape(inner_keyword).replace(r'\~', r'[~-]') + r'\)'
                 result = re.sub(pattern, '', result, flags=re.IGNORECASE)
                 # 별표와 함께 제거: *13~15*, *13-15* 등
                 pattern = r'\*' + re.escape(inner_keyword).replace(r'\~', r'[~-]') + r'\*'
                 result = re.sub(pattern, '', result, flags=re.IGNORECASE)
+            elif cleaned_keyword.startswith('(') and cleaned_keyword.endswith(')'):
+                # (모델컷) 형태 - 키워드 자체에 괄호가 포함된 경우
+                inner_keyword = cleaned_keyword[1:-1]  # 괄호 제거
+                # 괄호와 함께 제거: (모델컷)
+                pattern = r'\(' + re.escape(inner_keyword) + r'\)'
+                result = re.sub(pattern, '', result, flags=re.IGNORECASE)
             else:
                 # 일반 키워드
                 # 괄호와 함께 제거: (키워드)
-                pattern = r'\(' + re.escape(keyword) + r'\)'
+                pattern = r'\(' + re.escape(cleaned_keyword) + r'\)'
                 result = re.sub(pattern, '', result, flags=re.IGNORECASE)
                 
                 # 단독 키워드 제거 (단어 경계 사용)
                 try:
-                    pattern = r'\b' + re.escape(keyword) + r'\b'
+                    pattern = r'\b' + re.escape(cleaned_keyword) + r'\b'
                     result = re.sub(pattern, '', result, flags=re.IGNORECASE)
                 except:
                     # 단어 경계를 사용할 수 없는 경우 (한글 등)
-                    result = re.sub(re.escape(keyword), '', result, flags=re.IGNORECASE)
+                    result = re.sub(re.escape(cleaned_keyword), '', result, flags=re.IGNORECASE)
         
         # 공백 정리
         result = re.sub(r'\s+', ' ', result).strip()
