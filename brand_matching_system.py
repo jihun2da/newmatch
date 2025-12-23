@@ -736,15 +736,18 @@ class BrandMatchingSystem:
         try:
             normalized = name_str.lower()
             
-            # ⚡ 최우선: 상품명 키워드 추출 (사이즈 표기 제거)
+            # ⚡ 최우선: 상품명에서 사이즈 패턴만 선택적 제거
             # 목적: "스커트(XS~XL)" → "스커트" (매칭률 향상)
-            # (S(3~4)~XL(7~8)) → 빈 문자열
-            # 러블리양말(S~XL) → 러블리양말
-            # 티셔츠(FREE) → 티셔츠
+            # 하지만 "스커트(기모)" → "스커트(기모)" (일반 괄호는 유지)
             import re
-            normalized = re.sub(r'\([^()]*\)', '', normalized)  # 1차: 내부 괄호 제거
-            normalized = re.sub(r'\([^()]*\)', '', normalized)  # 2차: 외부 괄호 제거
-            normalized = re.sub(r'\([^()]*\)', '', normalized)  # 3차: 중첩 괄호 대비
+            
+            # 괄호 안에 ~ 또는 - 포함된 패턴만 삭제 (3번 반복으로 중첩 처리)
+            normalized = re.sub(r'\([^)]*[~-][^)]*\)', '', normalized)  # 1차
+            normalized = re.sub(r'\([^)]*[~-][^)]*\)', '', normalized)  # 2차
+            normalized = re.sub(r'\([^)]*[~-][^)]*\)', '', normalized)  # 3차
+            
+            # 별표 안에 ~ 또는 - 포함된 패턴만 삭제
+            normalized = re.sub(r'\*[^*]*[~-][^*]*\*', '', normalized)
             
             # 나머지 패턴 처리
             if 'brackets' in self._compiled_patterns:
@@ -1213,12 +1216,14 @@ class BrandMatchingSystem:
             for col in sheet2_columns:
                 sheet2_row[col] = ""
             
-            # 직접 매핑
+            # 직접 매핑 (모든 값을 문자열로 변환하여 과학적 표기법 방지)
             if len(sheet1_df.columns) >= 1:  # 업로드 A열 → Sheet2 C열 (주문일)
-                sheet2_row['C열(주문일)'] = str(row.iloc[0]) if pd.notna(row.iloc[0]) else ""
+                value = row.iloc[0]
+                sheet2_row['C열(주문일)'] = str(int(value)) if pd.notna(value) and isinstance(value, (int, float)) and value == int(value) else str(value) if pd.notna(value) else ""
             
             if len(sheet1_df.columns) >= 2:  # 업로드 B열 → Sheet2 D열 (아이디/주문번호)
-                sheet2_row['D열(아이디주문번호)'] = str(row.iloc[1]) if pd.notna(row.iloc[1]) else ""
+                value = row.iloc[1]
+                sheet2_row['D열(아이디주문번호)'] = str(int(value)) if pd.notna(value) and isinstance(value, (int, float)) and value == int(value) else str(value) if pd.notna(value) else ""
             
             if len(sheet1_df.columns) >= 3:  # 업로드 C열 → Sheet2 F열 (주문자명)
                 sheet2_row['F열(주문자명)'] = str(row.iloc[2]) if pd.notna(row.iloc[2]) else ""
@@ -1704,21 +1709,50 @@ class BrandMatchingSystem:
         return matched_df, similarity_results_df
 
     def save_to_excel(self, sheet2_df: pd.DataFrame, filename: str = "브랜드매칭결과.xlsx"):
-        """Sheet2 형식으로 엑셀 파일 저장"""
+        """Sheet2 형식으로 엑셀 파일 저장 - 숫자를 텍스트로 저장하여 과학적 표기법 방지"""
         try:
-            with pd.ExcelWriter(filename, engine='openpyxl') as writer:
-                # Sheet2 탭에 저장
-                sheet2_df.to_excel(writer, sheet_name='Sheet2', index=False)
-
-                # 컬럼 너비 조정
-                worksheet = writer.sheets['Sheet2']
-                for i, column in enumerate(sheet2_df.columns, 1):
-                    if i <= 26:
-                        column_letter = chr(64 + i)
+            from openpyxl import Workbook
+            
+            # 새 워크북 생성
+            wb = Workbook()
+            ws = wb.active
+            ws.title = 'Sheet2'
+            
+            # 헤더 추가
+            for col_idx, col_name in enumerate(sheet2_df.columns, 1):
+                ws.cell(row=1, column=col_idx, value=col_name)
+            
+            # 데이터 추가 (모든 값을 텍스트로 저장)
+            for row_idx, row in enumerate(sheet2_df.values, 2):
+                for col_idx, value in enumerate(row, 1):
+                    cell = ws.cell(row=row_idx, column=col_idx)
+                    
+                    # 모든 값을 문자열로 저장하여 과학적 표기법 방지
+                    if pd.notna(value):
+                        if isinstance(value, (int, float)):
+                            # 정수로 변환 가능하면 정수로, 아니면 원본 그대로
+                            if isinstance(value, float) and value == int(value):
+                                cell.value = str(int(value))
+                            else:
+                                cell.value = str(value)
+                        else:
+                            cell.value = str(value)
                     else:
-                        column_letter = f"A{chr(64 + i - 26)}"
-                    worksheet.column_dimensions[column_letter].width = 15
-
+                        cell.value = ""
+                    
+                    # 셀을 텍스트 형식으로 설정
+                    cell.number_format = '@'
+            
+            # 컬럼 너비 조정
+            for i in range(1, len(sheet2_df.columns) + 1):
+                if i <= 26:
+                    column_letter = chr(64 + i)
+                else:
+                    column_letter = f"A{chr(64 + i - 26)}"
+                ws.column_dimensions[column_letter].width = 15
+            
+            # 파일 저장
+            wb.save(filename)
             logger.info(f"엑셀 파일 저장 완료: {filename}")
             return filename
 

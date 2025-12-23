@@ -167,22 +167,51 @@ class BrandFileProcessor:
             return False
     
     def save_result_file(self, df: pd.DataFrame, base_filename: str = "브랜드매칭결과") -> str:
-        """결과 파일 저장"""
+        """결과 파일 저장 - 숫자를 텍스트로 저장하여 과학적 표기법 방지"""
         try:
+            from openpyxl import Workbook
+            
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = f"{base_filename}_{timestamp}.xlsx"
             file_path = os.path.join(self.results_dir, filename)
             
-            with pd.ExcelWriter(file_path, engine='openpyxl') as writer:
-                # Sheet2 탭에 저장
-                df.to_excel(writer, sheet_name='Sheet2', index=False)
-                
-                # 컬럼 너비 조정
-                worksheet = writer.sheets['Sheet2']
-                for i, column in enumerate(df.columns, 1):
-                    column_letter = chr(64 + i) if i <= 26 else f"A{chr(64 + i - 26)}"
-                    worksheet.column_dimensions[column_letter].width = 15
+            # 새 워크북 생성
+            wb = Workbook()
+            ws = wb.active
+            ws.title = 'Sheet2'
             
+            # 헤더 추가
+            for col_idx, col_name in enumerate(df.columns, 1):
+                ws.cell(row=1, column=col_idx, value=col_name)
+            
+            # 데이터 추가 (모든 값을 텍스트로 저장)
+            for row_idx, row in enumerate(df.values, 2):
+                for col_idx, value in enumerate(row, 1):
+                    cell = ws.cell(row=row_idx, column=col_idx)
+                    
+                    # 모든 값을 문자열로 저장하여 과학적 표기법 방지
+                    if pd.notna(value):
+                        if isinstance(value, (int, float)):
+                            # 정수로 변환 가능하면 정수로, 아니면 원본 그대로
+                            if isinstance(value, float) and value == int(value):
+                                cell.value = str(int(value))
+                            else:
+                                cell.value = str(value)
+                        else:
+                            cell.value = str(value)
+                    else:
+                        cell.value = ""
+                    
+                    # 셀을 텍스트 형식으로 설정
+                    cell.number_format = '@'
+            
+            # 컬럼 너비 조정
+            for i in range(1, len(df.columns) + 1):
+                column_letter = chr(64 + i) if i <= 26 else f"A{chr(64 + i - 26)}"
+                ws.column_dimensions[column_letter].width = 15
+            
+            # 파일 저장
+            wb.save(file_path)
             logger.info(f"결과 파일 저장 완료: {file_path}")
             return file_path
             
