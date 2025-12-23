@@ -1173,6 +1173,71 @@ class BrandMatchingSystem:
         result = re.sub(r'\s+', ' ', result).strip()
         
         return result
+    
+    def remove_front_parentheses_from_product(self, product_name: str) -> str:
+        """
+        상품명 앞쪽의 괄호만 제거하고 뒤쪽 괄호는 유지
+        
+        예시:
+        - "(앞괄호)상품명(뒤괄호)" → "상품명(뒤괄호)"
+        - "(색상)상품명" → "상품명"
+        - "상품명(기모)" → "상품명(기모)"
+        - "(S~XL)상품명(기모)" → "상품명(기모)"
+        """
+        if not product_name:
+            return product_name
+        
+        # 맨 앞의 괄호만 제거 (공백 포함)
+        result = re.sub(r'^\s*\([^)]*\)\s*', '', product_name)
+        
+        return result.strip()
+    
+    def remove_keywords_from_product(self, product_name: str) -> str:
+        """
+        상품명에서 키워드 관리의 키워드들을 제거
+        
+        - 괄호와 함께 제거: (키워드) → 삭제
+        - 대소문자 구분 없이 제거
+        - 여러 번 적용하여 모든 키워드 제거
+        """
+        if not product_name or not self.keyword_list:
+            return product_name
+        
+        result = product_name
+        
+        # 각 키워드에 대해 제거 작업 수행
+        for keyword in self.keyword_list:
+            if not keyword:
+                continue
+            
+            # * 기호로 감싼 키워드는 특수 처리
+            if keyword.startswith('*') and keyword.endswith('*'):
+                # *13~15* 형태의 키워드
+                inner_keyword = keyword[1:-1]  # * 제거
+                # 괄호와 함께 제거: (13~15), (13-15) 등
+                pattern = r'\(' + re.escape(inner_keyword).replace(r'\~', r'[~-]') + r'\)'
+                result = re.sub(pattern, '', result, flags=re.IGNORECASE)
+                # 별표와 함께 제거: *13~15*, *13-15* 등
+                pattern = r'\*' + re.escape(inner_keyword).replace(r'\~', r'[~-]') + r'\*'
+                result = re.sub(pattern, '', result, flags=re.IGNORECASE)
+            else:
+                # 일반 키워드
+                # 괄호와 함께 제거: (키워드)
+                pattern = r'\(' + re.escape(keyword) + r'\)'
+                result = re.sub(pattern, '', result, flags=re.IGNORECASE)
+                
+                # 단독 키워드 제거 (단어 경계 사용)
+                try:
+                    pattern = r'\b' + re.escape(keyword) + r'\b'
+                    result = re.sub(pattern, '', result, flags=re.IGNORECASE)
+                except:
+                    # 단어 경계를 사용할 수 없는 경우 (한글 등)
+                    result = re.sub(re.escape(keyword), '', result, flags=re.IGNORECASE)
+        
+        # 공백 정리
+        result = re.sub(r'\s+', ' ', result).strip()
+        
+        return result
 
     def convert_sheet1_to_sheet2(self, sheet1_df: pd.DataFrame) -> pd.DataFrame:
         """Sheet1 형식을 Sheet2 형식으로 변환 - 성능 최적화 버전"""
@@ -1259,16 +1324,11 @@ class BrandMatchingSystem:
                         cleaned_brand = self.remove_size_patterns_from_brand(brand_part)
                         sheet2_row['H열(브랜드)'] = cleaned_brand
                         
-                        # 상품명에 키워드 제거 적용
-                        cleaned_product_name = self.normalize_product_name(product_part)
-                        if len(cleaned_product_name) < 2:
-                            # 원본에서 괄호만 제거
-                            cleaned_product_name = product_part
-                            for keyword in self.keyword_list:
-                                if keyword:
-                                    pattern = r'\(' + re.escape(keyword) + r'\)'
-                                    cleaned_product_name = re.sub(pattern, '', cleaned_product_name, flags=re.IGNORECASE)
-                            cleaned_product_name = re.sub(r'\s+', ' ', cleaned_product_name).strip()
+                        # 상품명 처리: 앞쪽 괄호 제거 + 키워드 제거
+                        # 1단계: 앞쪽 괄호 제거
+                        cleaned_product_name = self.remove_front_parentheses_from_product(product_part)
+                        # 2단계: 키워드 제거
+                        cleaned_product_name = self.remove_keywords_from_product(cleaned_product_name)
                         
                         sheet2_row['I열(상품명)'] = cleaned_product_name
                         
@@ -1280,18 +1340,14 @@ class BrandMatchingSystem:
                             raw_brand = parts[0].strip()
                             cleaned_brand = self.remove_size_patterns_from_brand(raw_brand)
                             sheet2_row['H열(브랜드)'] = cleaned_brand
-                            # 상품명에 키워드 제거 적용
+                            
+                            # 상품명 처리: 앞쪽 괄호 제거 + 키워드 제거
                             raw_product_name = parts[1].strip() if len(parts) > 1 else ""
                             if raw_product_name:
-                                cleaned_product_name = self.normalize_product_name(raw_product_name)
-                                if len(cleaned_product_name) < 2:
-                                    # 원본에서 괄호만 제거
-                                    cleaned_product_name = raw_product_name
-                                    for keyword in self.keyword_list:
-                                        if keyword:
-                                            pattern = r'\(' + re.escape(keyword) + r'\)'
-                                            cleaned_product_name = re.sub(pattern, '', cleaned_product_name, flags=re.IGNORECASE)
-                                    cleaned_product_name = re.sub(r'\s+', ' ', cleaned_product_name).strip()
+                                # 1단계: 앞쪽 괄호 제거
+                                cleaned_product_name = self.remove_front_parentheses_from_product(raw_product_name)
+                                # 2단계: 키워드 제거
+                                cleaned_product_name = self.remove_keywords_from_product(cleaned_product_name)
                                 
                                 sheet2_row['I열(상품명)'] = cleaned_product_name
                             else:
