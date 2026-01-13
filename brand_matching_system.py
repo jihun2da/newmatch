@@ -770,7 +770,42 @@ class BrandMatchingSystem:
             # 별표 안에 ~ 또는 - 포함된 패턴만 삭제
             normalized = re.sub(r'\*[^*]*[~-][^*]*\*', '', normalized)
             
-            # 나머지 패턴 처리
+            # ⚡ 우선순위 변경: 키워드 제거를 특수문자 제거 전에 수행
+            # 목적: "(모델컷)", "(추가)" 등의 키워드를 괄호와 함께 제거
+            # 특수문자가 먼저 제거되면 키워드 매칭 실패
+            if self.keyword_list:
+                for keyword in self.keyword_list:
+                    if not keyword:
+                        continue
+                    
+                    # 키워드 정리
+                    cleaned_keyword = keyword.strip()
+                    
+                    # * 기호로 감싼 키워드는 특수 처리
+                    if cleaned_keyword.startswith('*') and cleaned_keyword.endswith('*'):
+                        # *13~15* 형태의 키워드
+                        inner_keyword = cleaned_keyword[1:-1]  # * 제거
+                        # 괄호와 함께 제거
+                        pattern = r'\(' + re.escape(inner_keyword).replace(r'\~', r'[~-]') + r'\)'
+                        normalized = re.sub(pattern, '', normalized, flags=re.IGNORECASE)
+                        # 별표와 함께 제거
+                        pattern = r'\*' + re.escape(inner_keyword).replace(r'\~', r'[~-]') + r'\*'
+                        normalized = re.sub(pattern, '', normalized, flags=re.IGNORECASE)
+                    elif cleaned_keyword.startswith('(') and cleaned_keyword.endswith(')'):
+                        # (모델컷) 형태 - 키워드 자체에 괄호가 포함된 경우
+                        inner_keyword = cleaned_keyword[1:-1]  # 괄호 제거
+                        # 괄호와 함께 제거
+                        pattern = r'\(' + re.escape(inner_keyword) + r'\)'
+                        normalized = re.sub(pattern, '', normalized, flags=re.IGNORECASE)
+                    else:
+                        # 일반 키워드 - 괄호와 함께 제거
+                        pattern = r'\(' + re.escape(cleaned_keyword) + r'\)'
+                        normalized = re.sub(pattern, '', normalized, flags=re.IGNORECASE)
+                
+                # 공백 정리
+                normalized = re.sub(r'\s+', ' ', normalized).strip()
+            
+            # 나머지 패턴 처리 (특수문자 제거)
             if 'brackets' in self._compiled_patterns:
                 normalized = self._compiled_patterns['brackets'].sub('', normalized)
             if 'braces' in self._compiled_patterns:
@@ -788,16 +823,21 @@ class BrandMatchingSystem:
             normalized = re.sub(r'\b(xs|s|m|l|xl|xxl|xxxl|2xl|3xl|4xl|5xl|free|js|jm|jl|jxl)\b', '', normalized, flags=re.IGNORECASE)
             normalized = re.sub(r'\s+', ' ', normalized).strip()
             
-            # 키워드 제거 (단순화 - 괄호는 이미 제거됨)
+            # 추가 키워드 정리 (단독 키워드 제거)
             if self.keyword_list:
-                # 일반 키워드만 제거 (괄호 안의 사이즈 패턴은 이미 제거됨)
                 for keyword in self.keyword_list:
-                    if not keyword or keyword.startswith('*'):
+                    if not keyword:
                         continue
                     
-                    # 단독 키워드 제거
-                    keyword_pattern = self._get_keyword_pattern(keyword)
-                    normalized = keyword_pattern.sub('', normalized)
+                    cleaned_keyword = keyword.strip()
+                    
+                    # 괄호나 별표가 없는 단독 키워드 제거
+                    if not (cleaned_keyword.startswith('(') or cleaned_keyword.startswith('*')):
+                        try:
+                            pattern = r'\b' + re.escape(cleaned_keyword) + r'\b'
+                            normalized = re.sub(pattern, '', normalized, flags=re.IGNORECASE)
+                        except:
+                            normalized = re.sub(re.escape(cleaned_keyword), '', normalized, flags=re.IGNORECASE)
                 
                 # 텍스트 정리
                 if 'comma_spaces' in self._compiled_patterns:
