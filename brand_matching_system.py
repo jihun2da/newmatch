@@ -510,7 +510,16 @@ class BrandMatchingSystem:
         # 1. 공백 제거
         size = size.strip()
         
-        # 2. 괄호 제거 후 다시 추가 (일관된 형식으로)
+        # 2. "m", "n" 접미사 제거 (예: "10-18m" → "10-18", "18-24n" → "18-24")
+        # 목적: 브랜드 시트와의 형식 통일
+        size = re.sub(r'([0-9]+)m\b', r'\1', size, flags=re.IGNORECASE)
+        size = re.sub(r'([0-9]+)n\b', r'\1', size, flags=re.IGNORECASE)
+        
+        # 3. 사이즈 코드와 괄호 사이의 공백 제거
+        # "S (10-18)" → "S(10-18)"
+        size = re.sub(r'([A-Z]+)\s+\(', r'\1(', size)
+        
+        # 4. 괄호 제거 후 다시 추가 (일관된 형식으로)
         # "L 24~36" → "L(24~36)"
         # "L(24-36)" → "L(24~36)"
         
@@ -522,10 +531,10 @@ class BrandMatchingSystem:
             end_num = match.group(3)
             return f"{size_code}({start_num}~{end_num})"
         
-        # 3. 기호 통일 (~로 통일)
+        # 5. 기호 통일 (~로 통일)
         size = size.replace('-', '~')
         
-        # 4. 괄호가 없는 경우 추가
+        # 6. 괄호가 없는 경우 추가
         if '(' not in size and '~' in size:
             # "L 24~36" → "L(24~36)"
             parts = size.split('~')
