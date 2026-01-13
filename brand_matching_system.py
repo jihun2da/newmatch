@@ -761,6 +761,12 @@ class BrandMatchingSystem:
             
             normalized = normalized.strip()
             
+            # 🔧 단독으로 남은 사이즈 코드 제거 (XL, XXL 등)
+            # 예: "땡러블리조거세트 xl" → "땡러블리조거세트"
+            # 목적: 사이즈 패턴 제거 후 남은 사이즈 코드로 인한 유사도 저하 방지
+            normalized = re.sub(r'\b(xs|s|m|l|xl|xxl|xxxl|2xl|3xl|4xl|5xl|free|js|jm|jl|jxl)\b', '', normalized, flags=re.IGNORECASE)
+            normalized = re.sub(r'\s+', ' ', normalized).strip()
+            
             # 키워드 제거 (단순화 - 괄호는 이미 제거됨)
             if self.keyword_list:
                 # 일반 키워드만 제거 (괄호 안의 사이즈 패턴은 이미 제거됨)

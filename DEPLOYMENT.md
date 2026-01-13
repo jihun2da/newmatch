@@ -92,3 +92,5 @@ streamlit run streamlit_app.py
 - 자동 배포: GitHub에 푸시하면 자동으로 재배포됩니다
 - 로그 확인: Streamlit Cloud 대시보드에서 앱 로그를 확인할 수 있습니다
 
+
+
