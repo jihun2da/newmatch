@@ -510,10 +510,11 @@ class BrandMatchingSystem:
         # 1. 공백 제거
         size = size.strip()
         
-        # 2. "m", "n" 접미사 제거 (예: "10-18m" → "10-18", "18-24n" → "18-24")
+        # 2. "m", "n", "호" 접미사 제거 (예: "10-18m" → "10-18", "9호" → "9")
         # 목적: 브랜드 시트와의 형식 통일
         size = re.sub(r'([0-9]+)m\b', r'\1', size, flags=re.IGNORECASE)
         size = re.sub(r'([0-9]+)n\b', r'\1', size, flags=re.IGNORECASE)
+        size = re.sub(r'([0-9]+)호\b', r'\1', size)  # 3호, 5호, 7호, 9호 등
         
         # 3. 사이즈 코드와 괄호 사이의 공백 제거
         # "S (10-18)" → "S(10-18)"
@@ -635,12 +636,23 @@ class BrandMatchingSystem:
         if f' {upload_size} ' in f' {brand_size_pattern} ':
             return 100.0
         
-        # 5. 괄호 제거 후 단어 단위로 매칭
+        # 5. 슬래시, 파이프로 구분된 패턴 매칭
+        # "3/5/7/9" → ['3', '5', '7', '9']
+        # "5|7|9|11" → ['5', '7', '9', '11']
+        if '/' in brand_size_pattern or '|' in brand_size_pattern:
+            # 슬래시와 파이프를 공백으로 치환하여 분리
+            separated = brand_size_pattern.replace('/', ' ').replace('|', ' ')
+            size_options = [s.strip() for s in separated.split() if s.strip()]
+            if upload_size in size_options or upload_size_code in size_options:
+                return 100.0  # ✅ 슬래시/파이프 구분 패턴 매칭!
+        
+        # 6. 괄호 제거 후 단어 단위로 매칭
         # "(XS)[S][M][L][XL]" → "XS S M L XL"
+        # "5 7 9 11" → ['5', '7', '9', '11']
         cleaned = re.sub(r'[\[\]()]', ' ', brand_size_pattern)
         size_tokens = [s.strip() for s in cleaned.split() if s.strip()]
         
-        if upload_size in size_tokens:
+        if upload_size in size_tokens or upload_size_code in size_tokens:
             return 100.0  # ✅ 단어로 정확히 일치
         
         # 4. 부분 일치는 0점 (더 엄격하게 - 주니어 혼동 방지)
